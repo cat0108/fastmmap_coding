@@ -397,8 +397,8 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 	struct iov_iter iter;
 	ssize_t ret;
 
-	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
+	init_sync_kiocb(&kiocb, filp);
 	iov_iter_init(&iter, READ, &iov, 1, len);
 
 	ret = call_read_iter(filp, &kiocb, &iter);
@@ -481,7 +481,7 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 
 	if (file->f_op->read)
 		ret = file->f_op->read(file, buf, count, pos);
-	else if (file->f_op->read_iter)
+	else if (file->f_op->read_iter)	/*ext4 use read iter*/
 		ret = new_sync_read(file, buf, count, pos);
 	else
 		ret = -EINVAL;
@@ -616,14 +616,14 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 
 	if (f.file) {
 		loff_t pos, *ppos = file_ppos(f.file);
-		if (ppos) {
+		if (ppos) {/*创建局部变量指针*/
 			pos = *ppos;
 			ppos = &pos;
 		}
 		ret = vfs_read(f.file, buf, count, ppos);
 		if (ret >= 0 && ppos)
 			f.file->f_pos = pos;
-		fdput_pos(f);
+		fdput_pos(f);/*减少引用计数*/
 	}
 	return ret;
 }

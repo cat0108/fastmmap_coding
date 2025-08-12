@@ -329,10 +329,10 @@ struct kiocb {
 	struct file		*ki_filp;
 
 	/* The 'ki_filp' pointer is shared in a union for aio */
-	randomized_struct_fields_start
+	randomized_struct_fields_start/*后面的字段会被随机化*/
 
 	loff_t			ki_pos;
-	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
+	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);/*异步操作的回调函数*/
 	void			*private;
 	int			ki_flags;
 	u16			ki_hint;
@@ -657,7 +657,7 @@ struct inode {
 		unsigned int __i_nlink;
 	};
 	dev_t			i_rdev;
-	loff_t			i_size;
+	loff_t			i_size;/*文件字节数*/
 	struct timespec64	i_atime;
 	struct timespec64	i_mtime;
 	struct timespec64	i_ctime;

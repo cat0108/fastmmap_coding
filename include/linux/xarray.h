@@ -128,7 +128,7 @@ static inline unsigned int xa_pointer_tag(void *entry)
 }
 
 /*
- * xa_mk_internal() - Create an internal entry.
+ * #nal() - Create an internal entry.
  * @v: Value to turn into an internal entry.
  *
  * Internal entries are used for a number of purposes.  Entries 0-255 are

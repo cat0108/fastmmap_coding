@@ -1367,6 +1367,7 @@ static unsigned int demote_page_list(struct list_head *demote_pages,
 
 /*
  * shrink_page_list() returns the number of reclaimed pages
+ * todo:如何修改被踢出page对应到的pte的映射？
  */
 static unsigned int shrink_page_list(struct list_head *page_list,
 				     struct pglist_data *pgdat,
@@ -1484,7 +1485,7 @@ retry:
 		 * memory pressure on the cache working set any longer than it
 		 * takes to write them to disk.
 		 */
-		if (PageWriteback(page)) {
+		if (PageWriteback(page)) {/*页面正在被写回磁盘，分情况处理*/
 			/* Case 1 above */
 			if (current_is_kswapd() &&
 			    PageReclaim(page) &&
@@ -1520,7 +1521,7 @@ retry:
 			}
 		}
 
-		if (!ignore_references)
+		if (!ignore_references)/*查看页面最近是否被引用*/
 			references = page_check_references(page, sc);
 
 		switch (references) {
@@ -1532,12 +1533,14 @@ retry:
 		case PAGEREF_RECLAIM:
 		case PAGEREF_RECLAIM_CLEAN:
 			; /* try to reclaim the page below */
+				/*todo:how?*/
 		}
 
 		/*
 		 * Before reclaiming the page, try to relocate
 		 * its contents to another node.
 		 */
+		 /*迁移页面到其他numa节点，直接退出*/
 		if (do_demote_pass &&
 		    (thp_migration_supported() || !PageTransHuge(page))) {
 			list_add(&page->lru, &demote_pages);
@@ -1589,7 +1592,7 @@ retry:
 				/* Adding to swap updated mapping */
 				mapping = page_mapping(page);
 			}
-		} else if (unlikely(PageTransHuge(page))) {
+		} else if (unlikely(PageTransHuge(page))) {	/*文件页的THP在此拆分吗？*/
 			/* Split file THP */
 			if (split_huge_page_to_list(page, page_list))
 				goto keep_locked;
@@ -1617,8 +1620,10 @@ retry:
 
 			if (unlikely(PageTransHuge(page)))
 				flags |= TTU_SPLIT_HUGE_PMD;
-
-			try_to_unmap(page, flags);
+			//在这里加入到far memory中
+			/*在移除所有page table mapping时，将所有进程对应页表的映射信息都保存？*/
+			/*注意点：页面持有锁的状态*/
+			try_to_unmap(page, flags);/*todo:在此处unmmap的同时加入到far memory中*/
 			if (page_mapped(page)) {
 				stat->nr_unmap_fail += nr_pages;
 				if (!was_swapbacked && PageSwapBacked(page))
@@ -1627,6 +1632,7 @@ retry:
 			}
 		}
 
+		/*先解除映射，再判断脏页，进行写回*/
 		if (PageDirty(page)) {
 			/*
 			 * Only kswapd can writeback filesystem pages
@@ -1666,7 +1672,7 @@ retry:
 			 * starts and then write it out here.
 			 */
 			try_to_unmap_flush_dirty();
-			switch (pageout(page, mapping)) {
+			switch (pageout(page, mapping)) {	/*在这里进行真正的页面写回*/
 			case PAGE_KEEP:
 				goto keep_locked;
 			case PAGE_ACTIVATE:
@@ -1694,6 +1700,8 @@ retry:
 			}
 		}
 
+		/*todo:metadata和页面内容写入TMR*/
+		
 		/*
 		 * If the page has buffers, try to free the buffer mappings
 		 * associated with this page. If we succeed we try to free
@@ -1715,7 +1723,7 @@ retry:
 		 * process address space (page_count == 1) it can be freed.
 		 * Otherwise, leave the page on the LRU so it is swappable.
 		 */
-		if (page_has_private(page)) {
+		if (page_has_private(page)) {/*释放page结构体相关的metadata,如bufferhead	*/
 			if (!try_to_release_page(page, sc->gfp_mask))
 				goto activate_locked;
 			if (!mapping && page_count(page) == 1) {
@@ -1751,7 +1759,7 @@ retry:
 			count_vm_event(PGLAZYFREED);
 			count_memcg_page_event(page, PGLAZYFREED);
 		} else if (!mapping || !__remove_mapping(mapping, page, true,
-							 sc->target_mem_cgroup))
+							 sc->target_mem_cgroup))/*这里的mapping是什么？*/
 			goto keep_locked;
 
 		unlock_page(page);
@@ -1815,7 +1823,7 @@ keep:
 
 	mem_cgroup_uncharge_list(&free_pages);
 	try_to_unmap_flush();
-	free_unref_page_list(&free_pages);
+	free_unref_page_list(&free_pages);/*真正释放页框*/
 
 	list_splice(&ret_pages, page_list);
 	count_vm_events(PGACTIVATE, pgactivate);
@@ -4238,7 +4246,8 @@ static int kswapd(void *p)
 
 kswapd_try_sleep:
 		kswapd_try_to_sleep(pgdat, alloc_order, reclaim_order,
-					highest_zoneidx);
+					highest_zoneidx);/*如果当前内存情况还可以，不需要回收，那么 kswapd 会进入睡眠状态
+						等待唤醒。*/
 
 		/* Read the new order and highest_zoneidx */
 		alloc_order = READ_ONCE(pgdat->kswapd_order);

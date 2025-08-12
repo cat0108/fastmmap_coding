@@ -96,7 +96,7 @@ extern int page_group_by_mobility_disabled;
 
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
-	unsigned long		nr_free;
+	unsigned long		nr_free;	//number of free blocks(not page!)
 };
 
 static inline struct page *get_page_from_free_area(struct free_area *area,
@@ -1292,7 +1292,7 @@ struct mem_section_usage {
 	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);
 #endif
 	/* See declaration of similar field in struct zone */
-	unsigned long pageblock_flags[0];
+	unsigned long pageblock_flags[0];/*dynamic extend*/
 };
 
 void subsection_map_init(unsigned long pfn, unsigned long nr_pages);

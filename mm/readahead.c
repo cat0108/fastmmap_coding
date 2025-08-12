@@ -126,7 +126,7 @@ static void read_pages(struct readahead_control *rac, struct list_head *pages,
 
 	blk_start_plug(&plug);
 
-	if (aops->readahead) {
+	if (aops->readahead) {	/*ext4 file system will use it*/
 		aops->readahead(rac);
 		/* Clean up the remaining pages */
 		while ((page = readahead_page(rac))) {
@@ -190,7 +190,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	 * filesystems already specify __GFP_NOFS in their mapping's
 	 * gfp_mask, but let's be explicit here.
 	 */
-	unsigned int nofs = memalloc_nofs_save();
+	unsigned int nofs = memalloc_nofs_save();	/*设置GFP_NOFS，禁止在分配途中调用FS操作*/
 
 	filemap_invalidate_lock_shared(mapping);
 	/*
@@ -199,7 +199,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	for (i = 0; i < nr_to_read; i++) {
 		struct page *page = xa_load(&mapping->i_pages, index + i);
 
-		if (page && !xa_is_value(page)) {
+		if (page && !xa_is_value(page)) {	/*遇到已经在page cache中的页，先提交之前的IO并处理*/
 			/*
 			 * Page already present?  Kick off the current batch
 			 * of contiguous pages before continuing with the
@@ -208,15 +208,16 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 			 * have a stable reference to this page, and it's
 			 * not worth getting one just for that.
 			 */
+			// add farmemory read page
 			read_pages(ractl, &page_pool, true);
-			i = ractl->_index + ractl->_nr_pages - index - 1;
+			i = ractl->_index + ractl->_nr_pages - index - 1;	/*这里-1是因为read_pages时第三个参数将index+1*/
 			continue;
 		}
 
 		page = __page_cache_alloc(gfp_mask);
 		if (!page)
 			break;
-		if (mapping->a_ops->readpages) {
+		if (mapping->a_ops->readpages) {	/*ext4文件系统未实现此分支函数*/
 			page->index = index + i;
 			list_add(&page->lru, &page_pool);
 		} else if (add_to_page_cache_lru(page, mapping, index + i,
@@ -236,7 +237,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	 * uptodate then the caller will launch readpage again, and
 	 * will then handle the error.
 	 */
-	read_pages(ractl, &page_pool, false);
+	read_pages(ractl, &page_pool, false);	/*ext4文件系统不通过page_pool而是ractl来传参*/
 	filemap_invalidate_unlock_shared(mapping);
 	memalloc_nofs_restore(nofs);
 }
@@ -409,7 +410,7 @@ static int try_context_readahead(struct address_space *mapping,
 {
 	pgoff_t size;
 
-	size = count_history_pages(mapping, index, max);
+	size = count_history_pages(mapping, index, max);/*从当前开始到前max页有多少连续页（顺序读的痕迹）*/
 
 	/*
 	 * not enough history pages:
@@ -422,7 +423,7 @@ static int try_context_readahead(struct address_space *mapping,
 	 * starts from beginning of file:
 	 * it is a strong indication of long-run stream (or whole-file-read)
 	 */
-	if (size >= index)
+	if (size >= index)	/*为什么用>=:和count_history_pages->page_cache_prev_miss的实现有关*/
 		size *= 2;
 
 	ra->start = index;
@@ -440,7 +441,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 {
 	struct backing_dev_info *bdi = inode_to_bdi(ractl->mapping->host);
 	struct file_ra_state *ra = ractl->ra;
-	unsigned long max_pages = ra->ra_pages;
+	unsigned long max_pages = ra->ra_pages;		/*最大预读窗口*/
 	unsigned long add_pages;
 	unsigned long index = readahead_index(ractl);
 	pgoff_t prev_index;
@@ -484,11 +485,11 @@ static void ondemand_readahead(struct readahead_control *ractl,
 				max_pages);
 		rcu_read_unlock();
 
-		if (!start || start - index > max_pages)
+		if (!start || start - index > max_pages)	/*想要预读的页都在page cache中，直接返回*/
 			return;
 
 		ra->start = start;
-		ra->size = start - index;	/* old async_size */
+		ra->size = start - index;	/* old async_size， index是上一次异步预读埋下的marker */
 		ra->size += req_size;
 		ra->size = get_next_ra_size(ra, max_pages);
 		ra->async_size = ra->size;
@@ -497,6 +498,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 
 	/*
 	 * oversize read
+	 * 对于大块的请求，重新初始化readahead
 	 */
 	if (req_size > max_pages)
 		goto initial_readahead;
@@ -505,9 +507,12 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	 * sequential cache miss
 	 * trivial case: (index - prev_index) == 1
 	 * unaligned reads: (index - prev_index) == 0
+	 * 这段可以这样理解：用户进行了顺序读取，但是
+	 * 产生了page cache miss进入到这里，这是因为
+	 * readahead没有跟上，于是需要重新初始化readahead
 	 */
 	prev_index = (unsigned long long)ra->prev_pos >> PAGE_SHIFT;
-	if (index - prev_index <= 1UL)
+	if (index - prev_index <= 1UL)	
 		goto initial_readahead;
 
 	/*
@@ -515,7 +520,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	 * that a sequential stream would leave behind.
 	 */
 	if (try_context_readahead(ractl->mapping, ra, index, req_size,
-			max_pages))
+			max_pages))	/*向前查看page cache数据，看看是否存在预读可能*/
 		goto readit;
 
 	/*
@@ -525,7 +530,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	do_page_cache_ra(ractl, req_size, 0);
 	return;
 
-initial_readahead:
+initial_readahead:	/*以本次请求为起点重新init一个readahead流*/
 	ra->start = index;
 	ra->size = get_init_ra_size(req_size, max_pages);
 	ra->async_size = ra->size > req_size ? ra->size - req_size : ra->size;
@@ -544,17 +549,17 @@ readit:
 			ra->size += add_pages;
 		} else {
 			ra->size = max_pages;
-			ra->async_size = max_pages >> 1;
+			ra->async_size = max_pages >> 1;	/*分半*/
 		}
 	}
 
-	ractl->_index = ra->start;
+	ractl->_index = ra->start;	/*在这里将index改为开始读的位置*/
 	do_page_cache_ra(ractl, ra->size, ra->async_size);
 }
 
 void page_cache_sync_ra(struct readahead_control *ractl,
 		unsigned long req_count)
-{
+{	/*强制预读用于随机访问，只预读最少的必要页面，避免过多的内存浪费*/
 	bool do_forced_ra = ractl->file && (ractl->file->f_mode & FMODE_RANDOM);
 
 	/*

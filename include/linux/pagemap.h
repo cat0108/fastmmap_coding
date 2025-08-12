@@ -789,7 +789,7 @@ struct readahead_control {
 	struct file_ra_state *ra;
 /* private: use the readahead_* accessors instead */
 	pgoff_t _index;
-	unsigned int _nr_pages;
+	unsigned int _nr_pages;	/*当前积累的待读取页面*/
 	unsigned int _batch_count;
 };
 
@@ -865,6 +865,7 @@ void page_cache_async_readahead(struct address_space *mapping,
  * and unlock the page once all I/O to that page has completed.
  * Return: A pointer to the next page, or %NULL if we are done.
  */
+
 static inline struct page *readahead_page(struct readahead_control *rac)
 {
 	struct page *page;

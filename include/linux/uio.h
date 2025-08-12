@@ -36,18 +36,18 @@ struct iov_iter_state {
 struct iov_iter {
 	u8 iter_type;
 	bool nofault;
-	bool data_source;
-	size_t iov_offset;
-	size_t count;
+	bool data_source;	/*数据方向（读/写）*/
+	size_t iov_offset;	/*在当前向量的偏移*/
+	size_t count;	/* remaining bytes */
 	union {
-		const struct iovec *iov;
+		const struct iovec *iov;	/* iovec向量 */
 		const struct kvec *kvec;
 		const struct bio_vec *bvec;
 		struct xarray *xarray;
 		struct pipe_inode_info *pipe;
 	};
 	union {
-		unsigned long nr_segs;
+		unsigned long nr_segs;/* 向量的数量 */
 		struct {
 			unsigned int head;
 			unsigned int start_head;

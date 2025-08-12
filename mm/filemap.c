@@ -1504,8 +1504,8 @@ static inline bool clear_bit_unlock_is_negative_byte(long nr, volatile void *mem
  * portably (architectures that do LL/SC can test any bit, while x86 can
  * test the sign bit).
  */
-void unlock_page(struct page *page)
 {
+void unlock_page(struct page *page)
 	BUILD_BUG_ON(PG_waiters != 7);
 	page = compound_head(page);
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
@@ -2343,7 +2343,7 @@ static void filemap_get_read_batch(struct address_space *mapping,
 			continue;
 		if (xas.xa_index > max || xa_is_value(head))
 			break;
-		if (!page_cache_get_speculative(head))
+		if (!page_cache_get_speculative(head))	/*add ref count*/
 			goto retry;
 
 		/* Has the page moved or been split? */
@@ -2352,9 +2352,9 @@ static void filemap_get_read_batch(struct address_space *mapping,
 
 		if (!pagevec_add(pvec, head))
 			break;
-		if (!PageUptodate(head))
+		if (!PageUptodate(head))	/*已经分配页框但还未io完成的页面，也先收集，在后续等待*/
 			break;
-		if (PageReadahead(head))
+		if (PageReadahead(head))	/*只要读到预读窗口边界，就会直接返回，开启下一轮预读*/
 			break;
 		if (PageHead(head)) {
 			xas_set(&xas, head->index + thp_nr_pages(head));
@@ -2428,7 +2428,7 @@ static int filemap_update_page(struct kiocb *iocb,
 {
 	int error;
 
-	if (iocb->ki_flags & IOCB_NOWAIT) {
+	if (iocb->ki_flags & IOCB_NOWAIT) {	/*try address space locking*/
 		if (!filemap_invalidate_trylock_shared(mapping))
 			return -EAGAIN;
 	} else {
@@ -2541,21 +2541,23 @@ static int filemap_get_pages(struct kiocb *iocb, struct iov_iter *iter,
 	/* "last_index" is the index of the page beyond the end of the read */
 	last_index = DIV_ROUND_UP(iocb->ki_pos + iter->count, PAGE_SIZE);
 retry:
-	if (fatal_signal_pending(current))
+	if (fatal_signal_pending(current))/*检查当前进程是否有待处理的致命信号(如SIGKILL)*/
 		return -EINTR;
-
+	/*从address_space的xarray中获取batch的页面*/
 	filemap_get_read_batch(mapping, index, last_index - 1, pvec);
 	if (!pagevec_count(pvec)) {
 		if (iocb->ki_flags & IOCB_NOIO)
 			return -EAGAIN;
-		page_cache_sync_readahead(mapping, ra, filp, index,
+		// page_cache_sync_readahead(mapping, ra, filp, index,	/*同步预取一些页面*/
+		//		last_index - index, 1); //触发farmemory读
+		page_cache_sync_readahead(mapping, ra, filp, index,	/*同步预取一些页面*/
 				last_index - index);
 		filemap_get_read_batch(mapping, index, last_index - 1, pvec);
 	}
-	if (!pagevec_count(pvec)) {
+	if (!pagevec_count(pvec)) {	/*预读过程异常进入此分支，进行最后处理*/
 		if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_WAITQ))
 			return -EAGAIN;
-		err = filemap_create_page(filp, mapping,
+		err = filemap_create_page(filp, mapping,	/*仅读取单个页*/
 				iocb->ki_pos >> PAGE_SHIFT, pvec);
 		if (err == AOP_TRUNCATED_PAGE)
 			goto retry;
@@ -2569,7 +2571,7 @@ retry:
 			goto err;
 	}
 	if (!PageUptodate(page)) {
-		if ((iocb->ki_flags & IOCB_WAITQ) && pagevec_count(pvec) > 1)
+		if ((iocb->ki_flags & IOCB_WAITQ) && pagevec_count(pvec) > 1)	/*支持waitq且处理多个页面，可添加NOWAIT(不阻塞)*/
 			iocb->ki_flags |= IOCB_NOWAIT;
 		err = filemap_update_page(iocb, mapping, iter, page);
 		if (err)
@@ -2661,7 +2663,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		 * Once we start copying data, we don't want to be touching any
 		 * cachelines that might be contended:
 		 */
-		writably_mapped = mapping_writably_mapped(mapping);
+		writably_mapped = mapping_writably_mapped(mapping);/*vm_shared 类型的mapping, mmap相关*/
 
 		/*
 		 * When a sequential read accesses a page several times, only
@@ -2699,7 +2701,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 
 			already_read += copied;
 			iocb->ki_pos += copied;
-			ra->prev_pos = iocb->ki_pos;
+			ra->prev_pos = iocb->ki_pos; /* Update the last read pos */
 
 			if (copied < bytes) {
 				error = -EFAULT;
@@ -2740,7 +2742,7 @@ EXPORT_SYMBOL_GPL(filemap_read);
  * * negative error code (or 0 if IOCB_NOIO) if nothing was read
  */
 ssize_t
-generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
+ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	size_t count = iov_iter_count(iter);
 	ssize_t retval = 0;
@@ -2748,16 +2750,16 @@ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	if (!count)
 		return 0; /* skip atime */
 
-	if (iocb->ki_flags & IOCB_DIRECT) {
+	if (iocb->ki_flags & IOCB_DIRECT) {	/*在此函数里依旧有对IOCB_DIRECT的判断，但是ext4的DIO不会进入到这里*/
 		struct file *file = iocb->ki_filp;
 		struct address_space *mapping = file->f_mapping;
 		struct inode *inode = mapping->host;
 		loff_t size;
 
-		size = i_size_read(inode);
-		if (iocb->ki_flags & IOCB_NOWAIT) {
+		size = i_size_read(inode);	/*文件字节数*/
+		if (iocb->ki_flags & IOCB_NOWAIT) {/*NOWAIT情况下不能发生回写情况*/
 			if (filemap_range_needs_writeback(mapping, iocb->ki_pos,
-						iocb->ki_pos + count - 1))
+						iocb->ki_pos + count - 1))/*在某处保证了只有一段iov?或者连续？*/
 				return -EAGAIN;
 		} else {
 			retval = filemap_write_and_wait_range(mapping,

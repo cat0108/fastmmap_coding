@@ -253,7 +253,7 @@ int ext4_mpage_readpages(struct inode *inode,
 
 		if (rac) {
 			page = readahead_page(rac);
-			prefetchw(&page->flags);
+			prefetchw(&page->flags);	/*将flags预取到cache中*/
 		}
 
 		if (page_has_buffers(page))

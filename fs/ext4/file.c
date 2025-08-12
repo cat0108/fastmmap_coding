@@ -77,7 +77,7 @@ static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ret = iomap_dio_rw(iocb, to, &ext4_iomap_ops, NULL, 0, 0);
 	inode_unlock_shared(inode);
 
-	file_accessed(iocb->ki_filp);
+	file_accessed(iocb->ki_filp);/*更新访问时间*/
 	return ret;
 }
 
@@ -121,7 +121,7 @@ static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		return 0; /* skip atime */
 
 #ifdef CONFIG_FS_DAX
-	if (IS_DAX(inode))
+	if (IS_DAX(inode))	/*DAX路径，用于持久化内存*/
 		return ext4_dax_read_iter(iocb, to);
 #endif
 	if (iocb->ki_flags & IOCB_DIRECT)
