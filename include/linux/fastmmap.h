@@ -1,9 +1,8 @@
 #ifndef _LINUX_FASTMMAP_H
 #define _LINUX_FASTMMAP_H
 
-#include "linux/mm.h"
-#include "linux/highmem.h"
-
+#include <linux/mm.h>
+#include <linux/jump_label.h>
 struct fastmmap_ops {
     void (*init)(unsigned); 
     int (*store)(unsigned, struct file*, struct page *);
@@ -47,8 +46,9 @@ static inline int fastmmap_load(struct file *file, struct page *page)
 
 static inline int fastmmap_init(unsigned size)
 {
-    if (fastmmap_enabled())
-        return __fastmmap_init(size);
+#ifdef CONFIG_FASTMMAP
+    return __fastmmap_init(size);
+#endif
     return -1;
 }
 #endif
