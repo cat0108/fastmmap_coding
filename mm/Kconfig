@@ -897,6 +897,13 @@ config IO_MAPPING
 config SECRETMEM
 	def_bool ARCH_HAS_SET_DIRECT_MAP && !EMBEDDED
 
+
+config FASTMMAP
+    bool "Enable fastmmap support"
+    default n
+    help
+      This option enables the fastmmap feature, which provides faster memory mapping.
+
 source "mm/damon/Kconfig"
 
 endmenu

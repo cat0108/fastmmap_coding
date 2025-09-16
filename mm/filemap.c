@@ -56,6 +56,8 @@
 
 #include <asm/mman.h>
 
+#include <linux/fastmmap.h>
+
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,
  * though.
@@ -3173,7 +3175,15 @@ page_not_uptodate:
 	 * and we need to check for errors.
 	 */
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+#ifdef CONFIG_FASTMMAP
+	if(fastmmap_load(offset, mapping, page) == 0){
+		//todo:找到后直接返回？还是选择跳过磁盘读取部分
+	} else {
+		error = filemap_read_page(file, mapping, page);
+	}
+#else
 	error = filemap_read_page(file, mapping, page);
+#endif
 	if (fpin)
 		goto out_retry;
 	put_page(page);

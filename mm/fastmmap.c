@@ -24,23 +24,24 @@ int __fastmmap_init(unsigned int size)
 }
 EXPORT_SYMBOL(__fastmmap_init);
 
-int __fastmmap_store(struct file *file, struct page *page)
+int __fastmmap_store(struct address_space *mapping, struct page *page)
 {
     struct fastmmap_ops *ops = fastmmap_ops;
+    pgoff_t index = page->index;
     if (!ops || !ops->store)
         return -1;
     //todo:这里进行最后决定传入的参数
-    return ops->store(0, file, page);
+    return ops->store(index, mapping, page);
 }
 EXPORT_SYMBOL(__fastmmap_store);
 
-int __fastmmap_load(struct file *file, struct page *page)
+int __fastmmap_load(pgoff_t offset, struct address_space *mapping, struct page *page)
 {
     struct fastmmap_ops *ops = fastmmap_ops;
     if (!ops || !ops->load)
         return -1;
     //todo:这里进行最后决定传入的参数
-    return ops->load(0, file, page);
+    return ops->load(offset, mapping, page);
 }
 EXPORT_SYMBOL(__fastmmap_load);
 

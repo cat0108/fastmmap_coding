@@ -1,19 +1,22 @@
 #ifndef _LINUX_FASTMMAP_H
 #define _LINUX_FASTMMAP_H
 
+
+#include <linux/page-flags.h>
 #include <linux/mm.h>
 #include <linux/jump_label.h>
+
 struct fastmmap_ops {
     void (*init)(unsigned); 
-    int (*store)(unsigned, struct file*, struct page *);
-    int (*load)(unsigned, struct file*, struct page *);
+    int (*store)(pgoff_t, struct address_space*, struct page *);
+    int (*load)(pgoff_t, struct address_space*, struct page *);
 };
 
 int fastmmap_register_ops(struct fastmmap_ops *ops);
 
 extern int __fastmmap_init(unsigned size);
-extern int __fastmmap_store(struct file *file, struct page *page);
-extern int __fastmmap_load(struct file *file, struct page *page);
+extern int __fastmmap_store(struct address_space*, struct page *page);
+extern int __fastmmap_load(pgoff_t, struct address_space*, struct page *page);
 
 
 #ifdef CONFIG_FASTMMAP
@@ -30,17 +33,23 @@ static inline bool fastmmap_enabled(void)
 }
 #endif
 
-static inline int fastmmap_store(struct file *file, struct page *page)
+static inline int fastmmap_store(struct address_space *mapping, struct page *page)
 {
-    if (fastmmap_enabled())
-        return __fastmmap_store(file, page);
+    VM_BUG_ON_PAGE(!PageLocked(page), page);
+    if (fastmmap_enabled() && mapping)
+        return __fastmmap_store(mapping, page);
     return -1;
 }
 
-static inline int fastmmap_load(struct file *file, struct page *page)
+static inline int fastmmap_load(pgoff_t offset, struct address_space *mapping, struct page *page)
 {
-    if (fastmmap_enabled())
-        return __fastmmap_load(file, page);
+    ClearPageError(page);
+
+    VM_BUG_ON_PAGE(!PageLocked(page), page);
+    VM_BUG_ON_PAGE(PageUptodate(page), page);
+    //pagelock已被占用，此时处于上锁状态
+    if (fastmmap_enabled() && mapping)
+        return __fastmmap_load(offset, mapping, page);
     return -1;
 }
 
