@@ -1506,8 +1506,9 @@ static inline bool clear_bit_unlock_is_negative_byte(long nr, volatile void *mem
  * portably (architectures that do LL/SC can test any bit, while x86 can
  * test the sign bit).
  */
-{
+
 void unlock_page(struct page *page)
+{
 	BUILD_BUG_ON(PG_waiters != 7);
 	page = compound_head(page);
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
