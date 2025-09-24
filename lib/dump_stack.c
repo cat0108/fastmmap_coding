@@ -108,8 +108,9 @@ asmlinkage __visible void dump_stack_lvl(const char *log_lvl)
 }
 EXPORT_SYMBOL(dump_stack_lvl);
 
-{
+
 asmlinkage __visible void dump_stack(void)
+{
 	dump_stack_lvl(KERN_DEFAULT);
 }
 EXPORT_SYMBOL(dump_stack);

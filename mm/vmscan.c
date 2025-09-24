@@ -57,6 +57,8 @@
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
 
+#include <linux/fastmmap.h>
+
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -1623,13 +1625,14 @@ retry:
 			//在这里加入到far memory中
 			/*在移除所有page table mapping时，将所有进程对应页表的映射信息都保存？*/
 			/*注意点：页面持有锁的状态*/
+			/*todo:路径：page->mapping(struct address_space)->host(struct inode)确定唯一文件*/
 			try_to_unmap(page, flags);/*todo:在此处unmmap的同时加入到far memory中*/
 			if (page_mapped(page)) {
 				stat->nr_unmap_fail += nr_pages;
 				if (!was_swapbacked && PageSwapBacked(page))
 					stat->nr_lazyfree_fail += nr_pages;
 				goto activate_locked;
-			}
+			} 
 		}
 
 		/*先解除映射，再判断脏页，进行写回*/
@@ -1701,7 +1704,12 @@ retry:
 		}
 
 		/*todo:metadata和页面内容写入TMR*/
-		
+#ifdef CONFIG_FASTMMAP
+		if(!(PageAnon(page) || PageSwapCache(page)))
+			if(fastmmap_store(mapping, page) == 0){
+				//todo:保存内容到tmr中，可能需要更新页状态之类的？
+			}
+#endif
 		/*
 		 * If the page has buffers, try to free the buffer mappings
 		 * associated with this page. If we succeed we try to free

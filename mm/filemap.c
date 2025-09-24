@@ -3177,9 +3177,8 @@ page_not_uptodate:
 	 */
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
 #ifdef CONFIG_FASTMMAP
-	if(fastmmap_load(offset, mapping, page) == 0){
+	if((error = fastmmap_load(offset, mapping, page)) != 0){
 		//todo:找到后直接返回？还是选择跳过磁盘读取部分
-	} else {
 		error = filemap_read_page(file, mapping, page);
 	}
 #else

@@ -28,6 +28,9 @@ int __fastmmap_store(struct address_space *mapping, struct page *page)
 {
     struct fastmmap_ops *ops = fastmmap_ops;
     pgoff_t index = page->index;
+
+    VM_BUG_ON_PAGE(!PageLocked(page), page);
+
     if (!ops || !ops->store)
         return -1;
     //todo:这里进行最后决定传入的参数
@@ -38,6 +41,11 @@ EXPORT_SYMBOL(__fastmmap_store);
 int __fastmmap_load(pgoff_t offset, struct address_space *mapping, struct page *page)
 {
     struct fastmmap_ops *ops = fastmmap_ops;
+
+    ClearPageError(page);
+    VM_BUG_ON_PAGE(!PageLocked(page), page);
+    VM_BUG_ON_PAGE(PageUptodate(page), page);
+    
     if (!ops || !ops->load)
         return -1;
     //todo:这里进行最后决定传入的参数

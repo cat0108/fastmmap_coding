@@ -35,7 +35,6 @@ static inline bool fastmmap_enabled(void)
 
 static inline int fastmmap_store(struct address_space *mapping, struct page *page)
 {
-    VM_BUG_ON_PAGE(!PageLocked(page), page);
     if (fastmmap_enabled() && mapping)
         return __fastmmap_store(mapping, page);
     return -1;
@@ -43,10 +42,6 @@ static inline int fastmmap_store(struct address_space *mapping, struct page *pag
 
 static inline int fastmmap_load(pgoff_t offset, struct address_space *mapping, struct page *page)
 {
-    ClearPageError(page);
-
-    VM_BUG_ON_PAGE(!PageLocked(page), page);
-    VM_BUG_ON_PAGE(PageUptodate(page), page);
     //pagelock已被占用，此时处于上锁状态
     if (fastmmap_enabled() && mapping)
         return __fastmmap_load(offset, mapping, page);
